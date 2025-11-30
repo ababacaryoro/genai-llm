@@ -1,0 +1,8 @@
+langchain-openai
+streamlit
+langchain>=0.0.200
+openai
+python-dotenv
+tiktoken
+requests
+langchain-community
