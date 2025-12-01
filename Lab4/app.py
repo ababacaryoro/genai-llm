@@ -14,6 +14,8 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.chat_history import BaseChatMessageHistory
+from utils import count_tokens, estimate_cost
+
 
 # Load environment variables
 load_dotenv()
@@ -48,16 +50,14 @@ def initialize_cost_tracker():
     }
 
 
-def update_costs(costs: dict, response_metadata: dict):
-    input_tok = response_metadata.get("input_tokens", 0)
-    output_tok = response_metadata.get("output_tokens", 0)
-    total_tok = input_tok + output_tok
-    cost_usd = response_metadata.get("cost", 0.0)
 
-    costs["input_tokens"] += input_tok
-    costs["output_tokens"] += output_tok
-    costs["total_tokens"] += total_tok
-    costs["total_cost_usd"] += cost_usd
+def update_costs(costs: dict, input_tokens: int, output_tokens: int, model: str):
+    estimated_cost = estimate_cost(input_tokens, output_tokens, model)
+
+    costs["input_tokens"] += input_tokens
+    costs["output_tokens"] += output_tokens
+    costs["total_tokens"] += (input_tokens + output_tokens)
+    costs["total_cost_usd"] += estimated_cost
 
     return costs
 
@@ -195,9 +195,19 @@ def main():
 
                     ai_text = response.content
 
-                    # 🎯 Update costs using OpenAI metadata
-                    metadata = response.response_metadata or {}
-                    st.session_state.costs = update_costs(st.session_state.costs, metadata)
+                    # Update costs using OpenAI metadata
+                    usage = response.usage_metadata or {}
+
+                    input_tokens = usage.get("input_tokens", 0)
+                    output_tokens = usage.get("output_tokens", 0)
+
+                    st.session_state.costs = update_costs(
+                        st.session_state.costs,
+                        input_tokens,
+                        output_tokens,
+                        model_name  # envoyé par l’utilisateur dans la sidebar
+                    )
+
 
                     # Display response
                     st.markdown(ai_text)

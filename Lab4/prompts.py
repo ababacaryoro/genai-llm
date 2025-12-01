@@ -2,8 +2,8 @@
 Prompt templates for different use cases
 """
 
-from langchain.prompts import PromptTemplate, ChatPromptTemplate
-from langchain.prompts.few_shot import FewShotPromptTemplate
+from langchain_core.prompts import PromptTemplate, ChatPromptTemplate
+from langchain_core.prompts.few_shot import FewShotPromptTemplate
 
 
 # Basic question-answer template
