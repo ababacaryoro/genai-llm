@@ -143,6 +143,8 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.chat_history import BaseChatMessageHistory
+from utils import count_tokens, estimate_cost
+
 
 # Load environment variables
 load_dotenv()
@@ -177,16 +179,14 @@ def initialize_cost_tracker():
     }
 
 
-def update_costs(costs: dict, response_metadata: dict):
-    input_tok = response_metadata.get("input_tokens", 0)
-    output_tok = response_metadata.get("output_tokens", 0)
-    total_tok = input_tok + output_tok
-    cost_usd = response_metadata.get("cost", 0.0)
 
-    costs["input_tokens"] += input_tok
-    costs["output_tokens"] += output_tok
-    costs["total_tokens"] += total_tok
-    costs["total_cost_usd"] += cost_usd
+def update_costs(costs: dict, input_tokens: int, output_tokens: int, model: str):
+    estimated_cost = estimate_cost(input_tokens, output_tokens, model)
+
+    costs["input_tokens"] += input_tokens
+    costs["output_tokens"] += output_tokens
+    costs["total_tokens"] += (input_tokens + output_tokens)
+    costs["total_cost_usd"] += estimated_cost
 
     return costs
 
@@ -324,9 +324,19 @@ def main():
 
                     ai_text = response.content
 
-                    # 🎯 Update costs using OpenAI metadata
-                    metadata = response.response_metadata or {}
-                    st.session_state.costs = update_costs(st.session_state.costs, metadata)
+                    # Update costs using OpenAI metadata
+                    usage = response.usage_metadata or {}
+
+                    input_tokens = usage.get("input_tokens", 0)
+                    output_tokens = usage.get("output_tokens", 0)
+
+                    st.session_state.costs = update_costs(
+                        st.session_state.costs,
+                        input_tokens,
+                        output_tokens,
+                        model_name  # envoyé par l’utilisateur dans la sidebar
+                    )
+
 
                     # Display response
                     st.markdown(ai_text)
@@ -341,6 +351,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 ```
 
@@ -358,11 +369,11 @@ Utility functions for the LLM Chatbot application
 """
 
 from typing import List, Dict, Optional
-from langchain.schema import BaseMessage, HumanMessage, AIMessage
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 import tiktoken
 
 
-def count_tokens(text: str, model: str = "gpt-4o-mini") -> int:
+def count_tokens(text: str, model: str = "gpt-5-nano") -> int:
     """
     Count the number of tokens in a text string.
     
@@ -396,15 +407,15 @@ def estimate_cost(input_tokens: int, output_tokens: int, model: str) -> float:
     # Pricing per 1M tokens (as of 2024)
     pricing = {
         "gpt-4o-mini": {"input": 0.15, "output": 0.60},
-        "gpt-4o": {"input": 2.50, "output": 10.00},
-        "gpt-4-turbo": {"input": 10.00, "output": 30.00},
-        "gpt-3.5-turbo": {"input": 0.50, "output": 1.50}
+        "gpt-5-nano": {"input": 0.05, "output": 0.4},
+        "gpt-4.1-nano": {"input": 0.10, "output": 0.4},
+        "gpt-4.1-mini": {"input": 0.40, "output": 1.60}
     }
     
-    model_pricing = pricing.get(model, pricing["gpt-4o-mini"])
+    model_pricing = pricing.get(model, pricing["gpt-5-nano"])
     
-    input_cost = (input_tokens / 1_000_000) * model_pricing["input"]
-    output_cost = (output_tokens / 1_000_000) * model_pricing["output"]
+    input_cost = (input_tokens / 1000000) * model_pricing["input"]
+    output_cost = (output_tokens / 1000000) * model_pricing["output"]
     
     return input_cost + output_cost
 
@@ -428,7 +439,7 @@ def format_conversation_history(messages: List[Dict]) -> str:
     return "\n\n".join(formatted)
 
 
-def truncate_history(messages: List[Dict], max_tokens: int = 4000, model: str = "gpt-4o-mini") -> List[Dict]:
+def truncate_history(messages: List[Dict], max_tokens: int = 4000, model: str = "gpt-5-nano") -> List[Dict]:
     """
     Truncate conversation history to fit within token limits.
     Keeps the most recent messages.
@@ -500,9 +511,9 @@ CODE_EXPLANATION_TEMPLATE = PromptTemplate(
     template="""Explain the following {language} code step by step.
 
 Code:
-```{language}
+``{language}
 {code}
-```
+``
 
 Explanation:"""
 )
@@ -600,7 +611,7 @@ Expected: Different response styles based on persona.
 
 ---
 
-## Part 6: Deployment Options
+## Part 6: Deployment Options (Optional)
 
 ### 6.1 Local Deployment (Development)
 
@@ -664,7 +675,7 @@ docker-compose up --build
 
 ---
 
-## Part 7: Exercise
+## Part 7: Exercise (Optional)
 
 ### Add Streaming Responses
 
